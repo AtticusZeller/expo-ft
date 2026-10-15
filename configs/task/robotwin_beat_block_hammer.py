@@ -23,8 +23,9 @@ def get_config():
     config.task_config_name = "demo_clean"
     # The RoboTwin checkout the env process runs against; a sibling of expo-ft in this workspace.
     config.robotwin_root = os.environ.get("ROBOTWIN_ROOT", "../robotwin")
-    # Evaluation seeds start at 100000 * (1 + seed_index); training and evaluation should use different indices.
-    config.seed_index = 0
+    # Seeds start at 100000 * (1 + seed_index). The env process reads this file itself, so parallel eval shards
+    # and online training pick disjoint seed ranges through ROBOTWIN_SEED_INDEX.
+    config.seed_index = int(os.environ.get("ROBOTWIN_SEED_INDEX", 0))
     config.instruction_type = "seen"
     # Fallback instruction and the learner's default prompt; per-episode instructions come from RoboTwin.
     config.language_instruction = "Pick up the hammer and beat the block."
