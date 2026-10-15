@@ -537,8 +537,9 @@ class Pi05Agent(Model):
 
     def process_raw_inputs(self, raw_observations, action_dim, resize_size, normalize=True):
         """Convert raw env observations into a batched model-ready Observation dict."""
-        # create a dummy actions
-        raw_observations["actions"] = np.zeros(action_dim)
+        # create a dummy actions; a one-step chunk, since DeltaActions (e.g. the Aloha/RoboTwin
+        # config) subtracts the state along a leading time axis
+        raw_observations["actions"] = np.zeros((1, action_dim))
         for key, value in raw_observations.items():
             raw_observations[key] = np.asarray(value)
             if "image" in key:
