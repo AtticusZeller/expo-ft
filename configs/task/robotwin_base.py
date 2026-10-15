@@ -16,8 +16,9 @@ def get_config():
 
     # Two arms, each 6 joint targets + 1 gripper, in the dataset's action order.
     config.action_dim = 14
-    # Action-shaped zero used for replay-buffer shapes.
-    config.example_action = np.zeros((1, config.action_dim))
+    # Replay-buffer shapes, and the first action the training loop sends after creating the env. It is the
+    # reset pose (arms at zero, grippers open at 1), so that first step leaves the robot where it is.
+    config.example_action = np.array([[0.0] * 6 + [1.0] + [0.0] * 6 + [1.0]])
 
     # Head camera plus both wrists; RoboTwin tasks may use either arm.
     config.critic_camera_keys = ("base_0_rgb", "left_wrist_0_rgb", "right_wrist_0_rgb")

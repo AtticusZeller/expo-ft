@@ -1,5 +1,5 @@
 import numpy as np
-from openpi_client import image_tools
+from xense_client import image_tools
 
 def process_image_for_obs(img, bgr_to_rgb=False, image_size=None):
     """Process image for observation: convert CHW to HWC, normalize to uint8, and resize.

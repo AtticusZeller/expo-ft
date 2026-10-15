@@ -17,7 +17,7 @@ from typing import Dict, Any, Optional
 import numpy as np
 import websockets
 import websockets.asyncio.client as _client
-from openpi_client import msgpack_numpy
+from xense_client import msgpack_numpy
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ['PYOPENGL_PLATFORM'] = 'egl'
@@ -308,6 +308,9 @@ async def _run_client(
     connection; redial on disconnect. Direct app-owned socket, so TCP_NODELAY is
     effective and per-step latency stays flat."""
     global _config_task_path, _step_timing_threshold_ms
+    # Resolve now: an env may chdir on creation (RoboTwin does), and create_env reloads this path.
+    if config_task_path and config_task_path.endswith(".py"):
+        config_task_path = os.path.abspath(config_task_path)
     _config_task_path = config_task_path
     _step_timing_threshold_ms = step_timing_threshold_ms
     logger = logging.getLogger(__name__)
