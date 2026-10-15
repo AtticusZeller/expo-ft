@@ -23,6 +23,7 @@ from expo_ft.data.replay_buffer import create_replay_buffer, _critic_key_to_stor
 from expo_ft.data.batch_processor import BatchProcessor
 from expo_ft.env.env_client import EnvClientWrapper
 from expo_ft.env.droid_utils import process_droid_dataset
+from expo_ft.env.lerobot_utils import process_lerobot_dataset
 from expo_ft.utils.log_utils import EpisodeState, TrainingStats
 from expo_ft.utils.loop_utils import AsyncChunkSampler, EpisodeSink
 from expo_ft.utils.timer import Timer
@@ -127,6 +128,12 @@ def main(_):
 
     if FLAGS.config_task.env_type == "droid":
         dataset = process_droid_dataset(
+            FLAGS.dataset_path,
+            FLAGS.config_task,
+            num_data=FLAGS.num_data,
+        )
+    elif FLAGS.config_task.env_type == "robotwin":
+        dataset = process_lerobot_dataset(
             FLAGS.dataset_path,
             FLAGS.config_task,
             num_data=FLAGS.num_data,

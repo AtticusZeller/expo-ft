@@ -160,9 +160,7 @@ def build_pi05_config(config):
     pi05_asset_id = agent_kwargs.pop("pi05_asset_id", "") or None
     model_cls = agent_kwargs.pop("model_cls")
 
-    pi05_train_config = openpi_config.get_config(
-        pi05_config_name, weight_loader_path=pi05_weight_loader_path
-    )
+    pi05_train_config = openpi_config.get_config(pi05_config_name)
     if pi05_weight_loader_path:
         # Use a loader that tolerates both openpi-style ("params") and
         # train_offline_rtc.py-style ("actor_params") checkpoint trees.

@@ -17,7 +17,7 @@ from typing import Dict, Tuple, Any
 import numpy as np
 import websockets.sync.server
 import websockets.exceptions
-from openpi_client import msgpack_numpy
+from xense_client import msgpack_numpy
 
 # Errors during an operation that just mean the connection dropped: close it and
 # wait for the rollout client to redial, then retry.

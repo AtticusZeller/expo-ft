@@ -3,10 +3,10 @@ name = "expo-ft"
 version = "0.1.0"
 description = "EXPO-FT: Sample-Efficient Reinforcement Learning Finetuning for Vision-Language-Action Models"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "openpi",
-    "openpi-client",
+    "xense-client",
     "absl-py>=2.0.0",
     "cloudpickle>=3.0.0",
     "etils[epath]>=1.5.0",
@@ -26,9 +26,9 @@ build-backend = "hatchling.build"
 # editable, so the package and its training scripts (scripts/*/finetune_droid.sh)
 # always come from the same checkout — no git/package version skew.
 openpi = { path = "expo_ft/agents/vla/openpi", editable = true }
-openpi-client = { path = "expo_ft/agents/vla/openpi/packages/openpi-client", editable = true }
+xense-client = { path = "expo_ft/agents/vla/openpi/packages/xense-client", editable = true }
 lerobot = { git = "https://github.com/huggingface/lerobot", rev = "0cf864870cf29f4738d3ade893e6fd13fbd7cdb5" }
 dlimp = { git = "https://github.com/kvablack/dlimp", rev = "ad72ce3a9b414db2185bc0b38461d4101a65477a" }
 
 [tool.uv]
-override-dependencies = ["ml-dtypes==0.4.1", "tensorstore==0.1.74", "datasets>=3.0,<4.0"]
+override-dependencies = ["ml-dtypes==0.4.1", "tensorstore==0.1.74"]

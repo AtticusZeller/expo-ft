@@ -27,7 +27,7 @@ import openpi.training.utils as training_utils
 import openpi.training.weight_loaders as _weight_loaders
 import openpi.transforms as _transforms
 
-from openpi_client import image_tools
+from xense_client import image_tools
 
 from expo_ft.agents.vla.vla_base import Model
 from expo_ft.data.dataset import DatasetDict
