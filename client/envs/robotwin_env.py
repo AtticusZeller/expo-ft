@@ -1,8 +1,8 @@
 """RoboTwin 2.0 task behind the expo-ft environment RPC (served by client/run_client.py).
 
-Runs in RoboTwin's own Python environment. Observations use the feature names of RoboTwin's
-LeRobot v3.0 conversion so that replay prefill (expo_ft/env/lerobot_utils.py) and live rollouts
-go through the same openpi transforms.
+Runs in RoboTwin's own Python environment. Observations use the feature names and the CHW image
+layout of RoboTwin's LeRobot v3.0 conversion so that replay prefill (expo_ft/env/lerobot_utils.py)
+and live rollouts go through the same openpi transforms.
 """
 
 import importlib
@@ -151,7 +151,7 @@ class RoboTwinEnv:
     def get_observation(self):
         raw = self.task.get_obs()
         obs = {
-            key: process_image_for_obs(raw["observation"][camera]["rgb"], image_size=self.image_size)
+            key: process_image_for_obs(raw["observation"][camera]["rgb"], image_size=self.image_size).transpose(2, 0, 1)
             for camera, key in CAMERA_KEYS.items()
         }
         obs["observation.state"] = np.asarray(raw["joint_action"]["vector"], dtype=np.float32)

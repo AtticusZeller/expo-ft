@@ -8,22 +8,26 @@ from tqdm import tqdm
 
 # Bookkeeping columns every LeRobot frame carries; they are not observations.
 _INDEX_KEYS = ("timestamp", "frame_index", "episode_index", "index", "task_index")
+# Action column written by scripts/convert_robotwin_to_lerobot.py: the same key the replay buffer
+# inserts, so a single openpi repack serves the SFT dataset and replay transitions.
+ACTION_KEY = "actions"
 
 
 def _frame_to_observation(frame, camera_keys):
     """Turn a decoded LeRobot frame into the observation dict the env endpoint sends.
 
     Keys stay the dataset feature names, so the openpi data config that repacks the
-    dataset for SFT also repacks replay observations. Images go back to HWC uint8,
-    which is what the replay buffer stores and what a live camera produces.
+    dataset for SFT also repacks replay observations. Images stay CHW, as LeRobot yields
+    them and as openpi's Aloha transforms expect, and go back to uint8, which is what the
+    replay buffer stores.
     """
     obs = {}
     for key, value in frame.items():
-        if key == "action" or key in _INDEX_KEYS or key == "task":
+        if key == ACTION_KEY or key in _INDEX_KEYS or key == "task":
             continue
         value = np.asarray(value)
         if key in camera_keys:
-            value = np.round(np.transpose(value, (1, 2, 0)) * 255).astype(np.uint8)
+            value = np.round(value * 255).astype(np.uint8)
         obs[key] = value
     obs["prompt"] = frame["task"]
     return obs
@@ -75,7 +79,7 @@ def process_lerobot_dataset(
         step = (
             int(frame["frame_index"]),
             _frame_to_observation(frame, camera_keys),
-            np.asarray(frame["action"], dtype=np.float32),
+            np.asarray(frame[ACTION_KEY], dtype=np.float32),
         )
         by_episode.setdefault(int(frame["episode_index"]), []).append(step)
 
