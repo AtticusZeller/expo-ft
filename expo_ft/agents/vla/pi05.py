@@ -440,6 +440,9 @@ class Pi05Agent(Model):
         self.infer_device = infer_device or jax.devices()[0]
         self.infer_sharding = jax.sharding.SingleDeviceSharding(self.infer_device)
         self.input_transforms, self.input_model_transforms = self._build_input_transform_pipeline()
+        # Normalized state of the latest observation; the output pipeline unnormalizes it and
+        # AbsoluteActions adds it back to delta actions.
+        self._last_state = None
         self.output_transforms = self._build_output_transform_pipeline()
 
         self.train_step = jax.jit(
@@ -548,6 +551,7 @@ class Pi05Agent(Model):
                 assert np.max(raw_observations[key]) > 1
 
         transformed_inputs = self.input_transforms(raw_observations)
+        self._last_state = np.asarray(transformed_inputs["state"])
         transformed_inputs = self.input_model_transforms(transformed_inputs)
         packed = _jitted_pack_observation(transformed_inputs)
         # Same key structure Observation.from_dict().to_dict() produced (extra
@@ -563,12 +567,18 @@ class Pi05Agent(Model):
         }
 
     def process_transformed_outputs(self, transformed_actions, unnormalize=True):
-        """Unnormalize unpadded actions back to the environment action space."""
+        """Unnormalize unpadded actions back to the environment action space.
+
+        Delta-action configs (e.g. Aloha/RoboTwin) need the state of the observation the actions were
+        sampled for; that is the one passed to the latest process_raw_inputs call.
+        """
         n = transformed_actions.shape[0]
         padded = self._pad_actions(transformed_actions.reshape(n, -1))
-        dummy_state = np.zeros((n, self.model_config.action_dim), dtype=np.float32)
+        state = np.zeros((n, self.model_config.action_dim), dtype=np.float32)
+        if self._last_state is not None:
+            state[:, :self._last_state.shape[-1]] = self._last_state
         output_dict = {
-            "state": dummy_state,
+            "state": state,
             "actions": np.array(padded),
         }
         processed = [
