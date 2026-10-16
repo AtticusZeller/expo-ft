@@ -66,10 +66,12 @@ class RoboTwinEnv:
 
     reset() walks seeds from 100000 * (1 + seed_index), skipping seeds whose expert
     demonstration fails, exactly like RoboTwin's evaluation; each reset uses the next seed.
+    With fixed_seed every reset replays the first valid seed instead.
     """
 
     def __init__(self, robotwin_root, robotwin_task, task_config_name="demo_clean", seed_index=0,
-                 instruction_type="seen", image_size=(224, 224), language_instruction=None, **_):
+                 instruction_type="seen", image_size=(224, 224), language_instruction=None,
+                 fixed_seed=False, **_):
         self.robotwin_root = os.path.abspath(robotwin_root)
         # RoboTwin loads assets through paths relative to its root.
         os.chdir(self.robotwin_root)
@@ -83,6 +85,7 @@ class RoboTwinEnv:
         self.default_instruction = language_instruction or robotwin_task
         self.image_size = tuple(image_size)
         self.next_seed = 100000 * (1 + int(seed_index))
+        self.fixed_seed = bool(fixed_seed)
         self.episode_id = 0
         self.seed = None
         self.instruction = None
@@ -130,16 +133,20 @@ class RoboTwinEnv:
         if self.task is not None:
             self.task.close_env()
             self.task = None
-        while True:
-            seed = self.next_seed
-            self.next_seed += 1
-            ok, episode_info = self._expert_succeeds(seed)
-            if ok:
-                break
+        # With fixed_seed the expert check and instruction of the first valid seed are reused,
+        # which also skips the ~60 s expert rollout on every later reset.
+        if not (self.fixed_seed and self.seed is not None):
+            while True:
+                seed = self.next_seed
+                self.next_seed += 1
+                ok, episode_info = self._expert_succeeds(seed)
+                if ok:
+                    break
+            self.seed = seed
+            self.instruction = self._instruction(episode_info, seed)
         task = self._new_task()
-        self._setup(task, seed)
-        self.task, self.seed = task, seed
-        self.instruction = self._instruction(episode_info, seed)
+        self._setup(task, self.seed)
+        self.task = task
         self.episode_id += 1
         return self.get_observation()
 

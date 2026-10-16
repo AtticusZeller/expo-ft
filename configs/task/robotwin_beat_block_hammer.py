@@ -26,6 +26,8 @@ def get_config():
     # Seeds start at 100000 * (1 + seed_index). The env process reads this file itself, so parallel eval shards
     # and online training pick disjoint seed ranges through ROBOTWIN_SEED_INDEX.
     config.seed_index = int(os.environ.get("ROBOTWIN_SEED_INDEX", 0))
+    # ROBOTWIN_FIXED_SEED=1 replays the first valid seed of that range every episode (single-scene debugging).
+    config.fixed_seed = os.environ.get("ROBOTWIN_FIXED_SEED", "0") == "1"
     config.instruction_type = "seen"
     # Fallback instruction and the learner's default prompt; per-episode instructions come from RoboTwin.
     config.language_instruction = "Pick up the hammer and beat the block."
