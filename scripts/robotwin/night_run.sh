@@ -143,8 +143,10 @@ fi
 [ -n "${NO_RL:-}" ] && { log "NO_RL set; stopping after the evaluation"; exit 0; }
 
 # ---- EXPO-FT joint update from the chosen checkpoint -----------------------------------------------
-# The reference run uses 4 GPUs data-parallel; take at most that many of ours.
-rl_gpus=$(IFS=,; echo "${gl[*]:0:$(( k < 4 ? k : 4 ))}")
+# One sampling GPU (it also renders the env) plus up to 4 update GPUs, as in the reference run;
+# the update count must divide batch 64.
+n_rl=$(( k >= 5 ? 5 : (k == 4 ? 3 : k) ))
+rl_gpus=$(IFS=,; echo "${gl[*]:0:$n_rl}")
 log "starting RL $RL_RUN on GPUs $rl_gpus from step $chosen"
 $HERE/rl_joint.sh $rl_gpus $RUN_DIR/$chosen $RL_RUN > $W/logs/rl_${RL_RUN}.log 2>&1 &
 RL_PID=$!

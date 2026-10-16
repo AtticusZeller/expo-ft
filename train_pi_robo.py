@@ -93,14 +93,27 @@ def main(_):
     init_logging()
     assert FLAGS.offline_ratio >= 0.0 and FLAGS.offline_ratio <= 1.0
 
-    if FLAGS.batch_size % jax.device_count() != 0:
+    # With >= 2 GPUs, device[0] only samples (the pi0.5 agent's infer_device) and the rest
+    # update, as in train_pi_robo_async.py; sharing device[0] between both ran it out of memory.
+    update_devices = jax.devices()[1:] if jax.device_count() > 1 else jax.devices()
+    num_update = len(update_devices)
+    if num_update % FLAGS.fsdp_devices != 0:
+        raise ValueError(
+            f"Number of update devices ({num_update}) must be divisible by "
+            f"fsdp_devices ({FLAGS.fsdp_devices})"
+        )
+    if FLAGS.batch_size % num_update != 0:
         raise ValueError(
             f"Batch size {FLAGS.batch_size} must be divisible by "
-            f"the number of devices {jax.device_count()}"
+            f"the number of update devices {num_update}"
         )
     set_compilation_cache_dir(f"sync-{FLAGS.config.model_cls}")
 
-    mesh = openpi_sharding.make_mesh(FLAGS.fsdp_devices)
+    mesh = jax.sharding.Mesh(
+        np.array(update_devices).reshape(num_update // FLAGS.fsdp_devices, FLAGS.fsdp_devices),
+        (openpi_sharding.BATCH_AXIS, openpi_sharding.FSDP_AXIS),
+    )
+    logging.info("Device layout: sampling on %s, updates on %s", jax.devices()[0], update_devices)
     data_sharding = jax.sharding.NamedSharding(
         mesh, jax.sharding.PartitionSpec(openpi_sharding.DATA_AXIS)
     )
@@ -291,9 +304,13 @@ def main(_):
     prefetch_pool = ThreadPoolExecutor(max_workers=1)
     pending_batch = None
 
+    cpu_device = jax.devices("cpu")[0]
+
     def _fetch(rng):
-        with buffer_lock:
-            return batch_processor.next_batch(rng)
+        # Gather on the host: on the default device (the sampling GPU) the prefetched image
+        # batches took ~45 GB; apply_data_sharding then sends them straight to the update mesh.
+        with buffer_lock, jax.default_device(cpu_device):
+            return batch_processor.next_batch(jax.device_put(rng, cpu_device))
 
     def run_agent_updates(num_updates: int, metrics: dict):
         nonlocal agent, combine_rng, pending_batch

@@ -1,11 +1,11 @@
 #!/bin/bash
 # EXPO-FT joint update on RoboTwin beat_block_hammer from an SFT checkpoint (reference defaults:
 # N=K=8, edit scale 0.2, UTD 20, 3 update calls per episode, updates after 10 episodes).
-# The learner and the RoboTwin env endpoint share the given GPUs; the env renders on the first one.
-# Usage: [ENV_GPU=i MEM_FRACTION=f EDIT_SCALE=b] rl_joint.sh <gpus comma list> <sft_step_dir> <run_name>
+# The first given GPU samples and renders the env; the rest run the updates (batch 64 must divide
+# by their count, e.g. 0,1,2,3,4).
+# Usage: [ENV_GPU=i MEM_FRACTION=f EDIT_SCALE=b ROBOTWIN_FIXED_SEED=1] rl_joint.sh <gpus comma list> <sft_step_dir> <run_name>
 set -uo pipefail
 GPUS=$1; STEP_DIR=$2; RUN=$3
-# ENV_GPU renders on its own card so the learner can take MEM_FRACTION of every learner GPU.
 ENV_GPU=${ENV_GPU:-${GPUS%%,*}}; MEM_FRACTION=${MEM_FRACTION:-0.85}; EDIT_SCALE=${EDIT_SCALE:-0.2}
 W=/root/data/atticux/agent-workspace/expo-ft
 SRC=$W/src/expo-ft
@@ -18,7 +18,7 @@ cd $SRC
 (
   source /public/bin/network_accelerate >/dev/null
   export WANDB_API_KEY=$(cat /root/data/atticux/.wandb_key) WANDB_ENTITY=atticux
-  # With the env on a learner GPU, MEM_FRACTION must leave it ~3.5 GB (rendering + CuRobo).
+  # MEM_FRACTION applies to every learner GPU and must leave the env ~3.5 GB on its card.
   export CUDA_VISIBLE_DEVICES=$GPUS XLA_PYTHON_CLIENT_MEM_FRACTION=$MEM_FRACTION
   exec nice -n 5 $SRC/.venv/bin/python train_pi_robo.py \
     --config_task=configs/task/robotwin_beat_block_hammer.py \
