@@ -228,6 +228,15 @@ def main(_):
     start_step = 0
     if resuming:
         agent = restore_checkpoint(checkpoint_manager, agent)
+        # Restored arrays come back committed to one device, unlike freshly initialized ones, and the
+        # update jit then rejects them next to the replicated rng. Replicate those leaves; the actor
+        # state keeps the sharding it was restored with.
+        agent = jax.tree_util.tree_map(
+            lambda x: jax.device_put(x, replicated_sharding)
+            if isinstance(x, jax.Array) and isinstance(x.sharding, jax.sharding.SingleDeviceSharding)
+            else x,
+            agent,
+        )
         if hasattr(agent, "cache_infer_params"):
             agent = agent.cache_infer_params()
         steps = tuple(checkpoint_manager.all_steps())
