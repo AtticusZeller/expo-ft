@@ -208,6 +208,7 @@ class PiReplayBuffer(Dataset):
         self._skip_norm_stats = skip_norm_stats
         self._prompt = task_description
         self._transform, self._model_transform = self._build_transform_pipeline()
+        self._delta_fix = self._build_delta_fix()
         self._buffer_keys = dataset_dict.keys()
         # Reused gather destinations, keyed by (role, rows, shape, dtype). sample_jax
         # hands out device copies, so the host staging is free to be overwritten next call.
@@ -335,7 +336,15 @@ class PiReplayBuffer(Dataset):
             prev_idx = (self._insert_index - action_idx) % self._capacity
             if self.dataset_dict["dones"][prev_idx]:
                 break
-            self.dataset_dict["actions"][prev_idx, action_idx:] = np.tile(preprocessed_action[None, :], (self._action_horizon - action_idx, 1))
+            back_action = preprocessed_action
+            if self._delta_fix is not None:
+                # The new action was made relative to this step's state; the earlier chunk is
+                # relative to its own first state. Rebase in normalized units.
+                dims = self._delta_fix.shape[0]
+                state_gap = row["state"][:dims] - self.dataset_dict["state"][prev_idx][:dims]
+                back_action = preprocessed_action.copy()
+                back_action[:dims] = back_action[:dims] + self._delta_fix * state_gap
+            self.dataset_dict["actions"][prev_idx, action_idx:] = np.tile(back_action[None, :], (self._action_horizon - action_idx, 1))
             if is_hil:
                 self.dataset_dict["hil_chunk"][prev_idx] = True
 
@@ -351,6 +360,29 @@ class PiReplayBuffer(Dataset):
             transition_dict.setdefault("is_hil", True)
             transition_dict.setdefault("is_success", True)
             self.insert(transition_dict)
+
+    def _build_delta_fix(self) -> Optional[np.ndarray]:
+        """Per-dim factor mapping a normalized state gap to a normalized delta-action shift.
+
+        With DeltaActions an action is stored as normalize(a - s) for the state s of the row it is
+        inserted at; a chunk that started k steps earlier needs normalize(a - s_prev). Both
+        normalizations are affine per dim, so the shift is (ns - ns_prev) * scale_state / scale_action
+        on the delta dims. None when the config has no delta actions or no norm stats.
+        """
+        masks = [t.mask for t in self._data_config.data_transforms.inputs
+                 if isinstance(t, _transforms.DeltaActions) and t.mask is not None]
+        if not masks or self._skip_norm_stats:
+            return None
+        mask = np.asarray(masks[0], dtype=bool)
+        stats = self._data_config.norm_stats
+        dims = mask.shape[0]
+
+        def scale(st):
+            if self._data_config.use_quantile_norm:
+                return np.asarray(st.q99)[:dims] - np.asarray(st.q01)[:dims] + 1e-6
+            return np.asarray(st.std)[:dims] + 1e-6
+
+        return np.where(mask, scale(stats["state"]) / scale(stats["actions"]), 0.0).astype(np.float32)
 
     def _build_transform_pipeline(self):
         """Build the transform pipeline similar to OpenPI's transform_iterable_dataset."""
