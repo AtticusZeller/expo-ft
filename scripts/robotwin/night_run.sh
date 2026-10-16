@@ -10,6 +10,7 @@
 # Idle = memory.used < IDLE_MIB and utilization 0 on every sample for IDLE_MINUTES straight.
 set -uo pipefail
 W=/root/data/atticux/agent-workspace/expo-ft
+HERE=$(cd "$(dirname "$0")" && pwd)
 SRC=$W/src/expo-ft
 O=$SRC/expo_ft/agents/vla/openpi
 CONFIG=pi05_robotwin_beat_block_hammer_lora
@@ -115,7 +116,7 @@ eval_step() {
   for ((j = 0; j < k; j++)); do
     eps=$(( EVAL_EPISODES / k + (j < EVAL_EPISODES % k ? 1 : 0) ))
     [ $eps -eq 0 ] && continue
-    /root/data/atticux/eval_sft_ckpt.sh ${gl[$j]} $RUN_DIR/$step $((8300 + j)) $eps $RUN_DIR/evals_night/$step/shard$j $j \
+    $HERE/eval_sft_ckpt.sh ${gl[$j]} $RUN_DIR/$step $((8300 + j)) $eps $RUN_DIR/evals_night/$step/shard$j $j \
       > $W/logs/eval_${EXP}_${step}_shard$j.log 2>&1 &
     pids+=($!)
   done
@@ -145,7 +146,7 @@ fi
 # The reference run uses 4 GPUs data-parallel; take at most that many of ours.
 rl_gpus=$(IFS=,; echo "${gl[*]:0:$(( k < 4 ? k : 4 ))}")
 log "starting RL $RL_RUN on GPUs $rl_gpus from step $chosen"
-/root/data/atticux/rl_joint.sh $rl_gpus $RUN_DIR/$chosen $RL_RUN > $W/logs/rl_${RL_RUN}.log 2>&1 &
+$HERE/rl_joint.sh $rl_gpus $RUN_DIR/$chosen $RL_RUN > $W/logs/rl_${RL_RUN}.log 2>&1 &
 RL_PID=$!
 while kill -0 $RL_PID 2>/dev/null && [ $(now_s) -lt $rl_stop_s ]; do sleep 60; done
 if kill -0 $RL_PID 2>/dev/null; then
