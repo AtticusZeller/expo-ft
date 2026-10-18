@@ -5,7 +5,8 @@ action[t] the joint vector of frame t+1, so the last frame only serves as a targ
 decoded with RoboTwin's decode_image_bit; each episode's task is one of its instructions, picked
 with a fixed seed. Frames are stored as images rather than video so readers need no FFmpeg.
 The action column is named `actions`, the key expo-ft's replay buffer inserts, so one openpi data
-config repacks both the SFT dataset and replay transitions.
+config repacks both the SFT dataset and replay transitions. Several --raw_dir values write one
+multi-task dataset, each episode keeping its own task's instruction.
 
 Example:
     HF_LEROBOT_HOME=<lerobot home> python scripts/convert_robotwin_to_lerobot.py \
@@ -58,21 +59,24 @@ def read_episode(raw_dir, episode, decode_image_bit):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--raw_dir", required=True)
+    parser.add_argument("--raw_dir", required=True, nargs="+", help="one or more task directories")
     parser.add_argument("--robotwin_root", required=True)
     parser.add_argument("--repo_id", required=True)
-    parser.add_argument("--num_episodes", type=int, default=0, help="0 = all episodes")
+    parser.add_argument("--num_episodes", type=int, default=0, help="per task; 0 = all episodes")
     # Aloha-AgileX saves a frame every save_freq sim steps; XPolicyLab reads this rate from collect_freq.
     parser.add_argument("--fps", type=int, default=15)
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 
     decode_image_bit = load_decode_image_bit(args.robotwin_root)
-    episodes = episode_ids(args.raw_dir)
-    if args.num_episodes > 0:
-        episodes = episodes[: args.num_episodes]
+    episodes = []  # (raw_dir, episode id)
+    for raw_dir in args.raw_dir:
+        ids = episode_ids(raw_dir)
+        if args.num_episodes > 0:
+            ids = ids[: args.num_episodes]
+        episodes += [(raw_dir, i) for i in ids]
 
-    joints, images, _ = read_episode(args.raw_dir, episodes[0], decode_image_bit)
+    joints, images, _ = read_episode(*episodes[0], decode_image_bit)
     features = {
         "observation.state": {"dtype": "float32", "shape": (joints.shape[1],), "names": None},
         "actions": {"dtype": "float32", "shape": (joints.shape[1],), "names": None},
@@ -83,8 +87,8 @@ def main():
                                     use_videos=False)
 
     rng = random.Random(args.seed)
-    for episode in tqdm(episodes):
-        joints, images, instructions = read_episode(args.raw_dir, episode, decode_image_bit)
+    for raw_dir, episode in tqdm(episodes):
+        joints, images, instructions = read_episode(raw_dir, episode, decode_image_bit)
         task = rng.choice(instructions)
         for t in range(len(joints) - 1):
             frame = {"observation.state": joints[t], "actions": joints[t + 1], "task": task}

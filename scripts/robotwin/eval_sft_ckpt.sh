@@ -4,11 +4,20 @@
 # Usage: eval_sft_ckpt.sh <gpu> <ckpt_step_dir> <port> <num_episodes> <out_dir> [seed_index]
 #   seed_index picks the seed range 100000 * (1 + seed_index); parallel shards use distinct indices.
 #   <gpu> may be empty to run the learner on CPU (debugging).
+#   TASK picks another RoboTwin task (configs/task/robotwin_task.py, official protocol); PI05_CONFIG and
+#   ASSET_ID name the checkpoint's openpi config and norm-stats asset. The defaults are beat_block_hammer's.
 set -uo pipefail
 GPU=$1; STEP_DIR=$2; PORT=$3; EPISODES=$4; OUT=$5; SEED_INDEX=${6:-0}
+TASK=${TASK:-beat_block_hammer}
+PI05_CONFIG=${PI05_CONFIG:-pi05_robotwin_beat_block_hammer_lora}
+ASSET_ID=${ASSET_ID:-robotwin/beat_block_hammer_aloha_clean_50}
 W=/root/data/atticux/agent-workspace/expo-ft
 SRC=$W/src/expo-ft
 O=$SRC/expo_ft/agents/vla/openpi
+if [ "$TASK" = beat_block_hammer ]; then CONFIG_TASK=configs/task/robotwin_beat_block_hammer.py
+else CONFIG_TASK=configs/task/robotwin_task.py; fi
+# Both sides load the task config, which reads these.
+export ROBOTWIN_TASK=$TASK ROBOTWIN_ROOT=/root/data/atticux/robotwin
 mkdir -p "$OUT"
 cd $SRC
 
@@ -18,12 +27,12 @@ if [ -z "$GPU" ]; then export JAX_PLATFORMS=cpu; fi
 CUDA_VISIBLE_DEVICES=$GPU XLA_PYTHON_CLIENT_MEM_FRACTION=0.5 \
   $SRC/.venv/bin/python eval_droid_policy.py \
   --config configs/model/expo_ft_pi_config.py \
-  --config.pi05_config_name=pi05_robotwin_beat_block_hammer_lora \
+  --config.pi05_config_name=$PI05_CONFIG \
   --config.pi05_weight_loader_path=$STEP_DIR/params \
   --config.pi05_assets_dir=$STEP_DIR/assets \
-  --config.pi05_asset_id=robotwin/beat_block_hammer_aloha_clean_50 \
-  --config_task configs/task/robotwin_beat_block_hammer.py \
-  --dataset_path $W/data/lerobot/robotwin/beat_block_hammer_aloha_clean_50 --num_data 1 \
+  --config.pi05_asset_id=$ASSET_ID \
+  --config_task $CONFIG_TASK \
+  --dataset_path $W/data/lerobot/robotwin/${TASK}_aloha_clean_50 --num_data 1 \
   --only_base_actions --num_episodes $EPISODES --client_host 127.0.0.1 --client_port $PORT \
   > "$OUT/eval.log" 2>&1 &
 EVAL_PID=$!
@@ -34,9 +43,9 @@ done
 
 # Env endpoint: RoboTwin's venv, headless Vulkan through the EGL ICD.
 CUDA_VISIBLE_DEVICES=$GPU VK_ICD_FILENAMES=/root/data/atticux/vulkan/nvidia_icd_egl.json ROBOTWIN_SEED_INDEX=$SEED_INDEX \
-ROBOTWIN_ROOT=/root/data/atticux/robotwin PYTHONPATH=$SRC:$O/packages/xense-client/src \
+PYTHONPATH=$SRC:$O/packages/xense-client/src \
   /root/data/atticux/robotwin/.venv/bin/python -m client.run_client --host 127.0.0.1 --port $PORT \
-  --config-task-path configs/task/robotwin_beat_block_hammer.py > "$OUT/env.log" 2>&1 &
+  --config-task-path $CONFIG_TASK > "$OUT/env.log" 2>&1 &
 ENV_PID=$!
 trap 'kill $ENV_PID $EVAL_PID 2>/dev/null' EXIT
 wait $EVAL_PID
