@@ -56,6 +56,7 @@ flags.DEFINE_integer("checkpoint_interval", 0, "Save agent checkpoint every N st
 flags.DEFINE_boolean("checkpoint_buffer", False, "Save agent replay buffer on evaluation.")
 flags.DEFINE_integer("utd_ratio", 20, "Update to data ratio.")
 flags.DEFINE_integer("keep_period", None, "Keep checkpoints every N steps.")
+flags.DEFINE_integer("max_to_keep", 100, "Agent checkpoints kept on disk; older ones are deleted (each is ~16 GB with pi0.5).")
 flags.DEFINE_boolean("overwrite", False, "Overwrite existing checkpoint directory.")
 flags.DEFINE_boolean("resume", False, "Resume training from checkpoint.")
 flags.DEFINE_string("output_dir", "./logs", "Directory for logs and checkpoints.")
@@ -132,6 +133,7 @@ def main(_):
     checkpoint_manager, resuming = initialize_checkpoint_dir(
         checkpoint_dir_path,
         keep_period=FLAGS.keep_period,
+        max_to_keep=FLAGS.max_to_keep,
         overwrite=FLAGS.overwrite,
         resume=FLAGS.resume,
     )
