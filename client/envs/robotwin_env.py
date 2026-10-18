@@ -70,6 +70,9 @@ class RoboTwinEnv:
     With fixed_seed every reset replays the first valid seed instead. With single_attempt the
     episode also ends as a failure once the task's first attempt is over without success
     (client/envs/robotwin_attempts.py).
+
+    One task object serves every expert check and episode, as RoboTwin's evaluation does:
+    setup_demo then reuses the robot and its curobo planners (~18 s to build) across scenes.
     """
 
     def __init__(self, robotwin_root, robotwin_task, task_config_name="demo_clean", seed_index=0,
@@ -96,22 +99,19 @@ class RoboTwinEnv:
         self.episode_id = 0
         self.seed = None
         self.instruction = None
-        self.task = None
-
-    def _new_task(self):
         module = importlib.import_module(f"envs.{self.task_name}")
-        return getattr(module, self.task_name)()
+        self.task = getattr(module, self.task_name)()
 
-    def _setup(self, task, seed):
-        task.setup_demo(now_ep_num=self.episode_id, seed=seed, is_test=True, **self.args)
+    def _setup(self, seed):
+        self.task.setup_demo(now_ep_num=self.episode_id, seed=seed, is_test=True, **self.args)
 
     def _expert_succeeds(self, seed):
         """Run the scripted expert on `seed`; RoboTwin evaluation only keeps seeds it can solve."""
         from envs.utils.create_actor import UnStableError
 
-        task = self._new_task()
+        task = self.task
         try:
-            self._setup(task, seed)
+            self._setup(seed)
             episode_info = task.play_once()
             ok = bool(task.plan_success and task.check_success())
         except UnStableError:
@@ -137,9 +137,7 @@ class RoboTwinEnv:
         return self.default_instruction
 
     def reset(self):
-        if self.task is not None:
-            self.task.close_env()
-            self.task = None
+        self.task.close_env()
         # With fixed_seed the expert check and instruction of the first valid seed are reused,
         # which also skips the ~60 s expert rollout on every later reset.
         if not (self.fixed_seed and self.seed is not None):
@@ -151,9 +149,7 @@ class RoboTwinEnv:
                     break
             self.seed = seed
             self.instruction = self._instruction(episode_info, seed)
-        task = self._new_task()
-        self._setup(task, self.seed)
-        self.task = task
+        self._setup(self.seed)
         self.judge = self.judge_cls() if self.judge_cls else None
         self.episode_id += 1
         return self.get_observation()
