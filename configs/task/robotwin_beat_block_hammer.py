@@ -35,6 +35,9 @@ def get_config():
     # ROBOTWIN_STEP_LIMIT=n ends an episode as a failure after n steps instead of step_lim (400), with
     # retries allowed inside it (user 2026-10-18: 150, near the demonstrations' ~120). 0 keeps step_lim.
     config.step_limit = int(os.environ.get("ROBOTWIN_STEP_LIMIT", 0))
+    # ROBOTWIN_SEED_TABLE=<json> takes seeds and instructions from a precomputed table
+    # (scripts/robotwin/make_seed_table.py) instead of running the expert at every reset.
+    config.seed_table = os.environ.get("ROBOTWIN_SEED_TABLE", "")
     config.instruction_type = "seen"
     # Fallback instruction and the learner's default prompt; per-episode instructions come from RoboTwin.
     config.language_instruction = "Pick up the hammer and beat the block."

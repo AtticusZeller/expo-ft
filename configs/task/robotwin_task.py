@@ -36,6 +36,9 @@ def get_config():
     # (client/envs/robotwin_attempts.py), and the co-trained base is picked under the official
     # protocol for every task (user 2026-10-18).
     config.single_attempt = os.environ.get("ROBOTWIN_SINGLE_ATTEMPT", "0") == "1"
+    # ROBOTWIN_SEED_TABLE=<json> takes seeds and instructions from a precomputed table
+    # (scripts/robotwin/make_seed_table.py) instead of running the expert at every reset.
+    config.seed_table = os.environ.get("ROBOTWIN_SEED_TABLE", "")
     config.instruction_type = "seen"
     # Fallback only; each episode's instruction comes from RoboTwin.
     config.language_instruction = task.replace("_", " ")

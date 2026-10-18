@@ -6,6 +6,7 @@ and live rollouts go through the same openpi transforms.
 """
 
 import importlib
+import json
 import os
 import random
 import sys
@@ -72,13 +73,17 @@ class RoboTwinEnv:
     (client/envs/robotwin_attempts.py). A positive step_limit lowers the task's step_lim, so
     retries count only while they fit in it.
 
+    With seed_table (a JSON file from scripts/robotwin/make_seed_table.py) reset takes the next
+    precomputed seed and instruction instead of running the expert, as RLinf does: the table holds
+    the seeds the expert check would have accepted, in the same order, so only reset time changes.
+
     One task object serves every expert check and episode, as RoboTwin's evaluation does:
     setup_demo then reuses the robot and its curobo planners (~18 s to build) across scenes.
     """
 
     def __init__(self, robotwin_root, robotwin_task, task_config_name="demo_clean", seed_index=0,
                  instruction_type="seen", image_size=(224, 224), language_instruction=None,
-                 fixed_seed=False, single_attempt=False, step_limit=0, **_):
+                 fixed_seed=False, single_attempt=False, step_limit=0, seed_table="", **_):
         self.robotwin_root = os.path.abspath(robotwin_root)
         # RoboTwin loads assets through paths relative to its root.
         os.chdir(self.robotwin_root)
@@ -98,6 +103,7 @@ class RoboTwinEnv:
         self.judge_cls = ATTEMPT_JUDGES[robotwin_task] if single_attempt else None
         self.judge = None
         self.step_limit = int(step_limit)
+        self.table = self._load_table(seed_table) if seed_table else None
         self.episode_id = 0
         self.seed = None
         self.instruction = None
@@ -138,8 +144,37 @@ class RoboTwinEnv:
             print(f"[RoboTwinEnv] instruction generation failed: {e}")
         return self.default_instruction
 
+    def _load_table(self, path):
+        with open(path, encoding="utf-8") as f:
+            table = json.load(f)
+        if (table["task"], table["task_config"], table["instruction_type"]) != (
+                self.task_name, self.args["task_config"], self.instruction_type):
+            raise ValueError(f"Seed table {path} is for {table['task']}/{table['task_config']}/"
+                             f"{table['instruction_type']}")
+        # Entries are (seed, instruction), in seed order; start at this env's seed range.
+        return [tuple(e) for e in table["seeds"] if e[0] >= self.next_seed]
+
+    def _reset_from_table(self):
+        from envs.utils.create_actor import UnStableError
+
+        while True:
+            if not self.table:
+                raise RuntimeError("Seed table exhausted")
+            self.seed, self.instruction = self.table[0] if self.fixed_seed else self.table.pop(0)
+            try:
+                self._setup(self.seed)
+                return
+            except UnStableError:  # As RLinf: an unstable scene moves on to the next seed.
+                self.task.close_env()
+                if self.fixed_seed:
+                    self.table.pop(0)
+
     def reset(self):
         self.task.close_env()
+        if self.table is not None:
+            self._reset_from_table()
+            self._after_setup()
+            return self.get_observation()
         # With fixed_seed the expert check and instruction of the first valid seed are reused,
         # which also skips the ~60 s expert rollout on every later reset.
         if not (self.fixed_seed and self.seed is not None):
@@ -152,11 +187,14 @@ class RoboTwinEnv:
             self.seed = seed
             self.instruction = self._instruction(episode_info, seed)
         self._setup(self.seed)
+        self._after_setup()
+        return self.get_observation()
+
+    def _after_setup(self):
         if self.step_limit > 0:
             self.task.step_lim = min(self.task.step_lim, self.step_limit)
         self.judge = self.judge_cls() if self.judge_cls else None
         self.episode_id += 1
-        return self.get_observation()
 
     def step(self, action):
         action = np.asarray(action, dtype=np.float64)
