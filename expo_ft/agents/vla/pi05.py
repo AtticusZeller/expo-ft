@@ -2,6 +2,7 @@
 
 import dataclasses
 import functools
+import threading
 from functools import partial
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -441,8 +442,10 @@ class Pi05Agent(Model):
         self.infer_sharding = jax.sharding.SingleDeviceSharding(self.infer_device)
         self.input_transforms, self.input_model_transforms = self._build_input_transform_pipeline()
         # Normalized state of the latest observation; the output pipeline unnormalizes it and
-        # AbsoluteActions adds it back to delta actions.
-        self._last_state = None
+        # AbsoluteActions adds it back to delta actions. Kept per thread: with several envs, each
+        # env thread samples through this one agent, and a shared slot would hand one env's state
+        # to another env's actions.
+        self._local = threading.local()
         self.output_transforms = self._build_output_transform_pipeline()
 
         self.train_step = jax.jit(
@@ -551,7 +554,7 @@ class Pi05Agent(Model):
                 assert np.max(raw_observations[key]) > 1
 
         transformed_inputs = self.input_transforms(raw_observations)
-        self._last_state = np.asarray(transformed_inputs["state"])
+        self._local.last_state = np.asarray(transformed_inputs["state"])
         transformed_inputs = self.input_model_transforms(transformed_inputs)
         packed = _jitted_pack_observation(transformed_inputs)
         # Same key structure Observation.from_dict().to_dict() produced (extra
@@ -570,13 +573,14 @@ class Pi05Agent(Model):
         """Unnormalize unpadded actions back to the environment action space.
 
         Delta-action configs (e.g. Aloha/RoboTwin) need the state of the observation the actions were
-        sampled for; that is the one passed to the latest process_raw_inputs call.
+        sampled for; that is the one passed to this thread's latest process_raw_inputs call.
         """
         n = transformed_actions.shape[0]
         padded = self._pad_actions(transformed_actions.reshape(n, -1))
         state = np.zeros((n, self.model_config.action_dim), dtype=np.float32)
-        if self._last_state is not None:
-            state[:, :self._last_state.shape[-1]] = self._last_state
+        last_state = getattr(self._local, "last_state", None)
+        if last_state is not None:
+            state[:, :last_state.shape[-1]] = last_state
         output_dict = {
             "state": state,
             "actions": np.array(padded),
