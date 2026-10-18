@@ -13,6 +13,7 @@ import sys
 import numpy as np
 import yaml
 
+from client.envs.robotwin_attempts import ATTEMPT_JUDGES
 from client.envs.utils import process_image_for_obs
 
 # RoboTwin camera name -> LeRobot feature name used by XPolicyLab's v3.0 conversion.
@@ -66,12 +67,14 @@ class RoboTwinEnv:
 
     reset() walks seeds from 100000 * (1 + seed_index), skipping seeds whose expert
     demonstration fails, exactly like RoboTwin's evaluation; each reset uses the next seed.
-    With fixed_seed every reset replays the first valid seed instead.
+    With fixed_seed every reset replays the first valid seed instead. With single_attempt the
+    episode also ends as a failure once the task's first attempt is over without success
+    (client/envs/robotwin_attempts.py).
     """
 
     def __init__(self, robotwin_root, robotwin_task, task_config_name="demo_clean", seed_index=0,
                  instruction_type="seen", image_size=(224, 224), language_instruction=None,
-                 fixed_seed=False, **_):
+                 fixed_seed=False, single_attempt=False, **_):
         self.robotwin_root = os.path.abspath(robotwin_root)
         # RoboTwin loads assets through paths relative to its root.
         os.chdir(self.robotwin_root)
@@ -86,6 +89,10 @@ class RoboTwinEnv:
         self.image_size = tuple(image_size)
         self.next_seed = 100000 * (1 + int(seed_index))
         self.fixed_seed = bool(fixed_seed)
+        if single_attempt and robotwin_task not in ATTEMPT_JUDGES:
+            raise ValueError(f"No single-attempt judge for RoboTwin task {robotwin_task}")
+        self.judge_cls = ATTEMPT_JUDGES[robotwin_task] if single_attempt else None
+        self.judge = None
         self.episode_id = 0
         self.seed = None
         self.instruction = None
@@ -147,6 +154,7 @@ class RoboTwinEnv:
         task = self._new_task()
         self._setup(task, self.seed)
         self.task = task
+        self.judge = self.judge_cls() if self.judge_cls else None
         self.episode_id += 1
         return self.get_observation()
 
@@ -167,7 +175,10 @@ class RoboTwinEnv:
 
     def get_info_for_step(self):
         success = bool(self.task.eval_success)
-        done = success or self.task.take_action_cnt >= self.task.step_lim
+        failed_attempt = (
+            not success and self.judge is not None and self.judge.attempt_failed(self.task)
+        )
+        done = success or failed_attempt or self.task.take_action_cnt >= self.task.step_lim
         return done, success, 1.0 if success else 0.0, 0.0 if done else 1.0
 
     def render(self):
