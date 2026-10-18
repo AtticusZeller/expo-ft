@@ -3,14 +3,16 @@
 # N=K=8, edit scale 0.2, UTD 20, 3 update calls per episode, updates after 10 episodes).
 # The first given GPU samples and renders the env; the rest run the updates (batch 64 must divide
 # by their count, e.g. 0,1,2,3,4).
-# Usage: [ENV_GPU=i MEM_FRACTION=f EDIT_SCALE=b ROBOTWIN_FIXED_SEED=1] rl_joint.sh <gpus comma list> <sft_step_dir> <run_name>
+# PORT and N_EDIT (edit candidates, 0 = critic picks among base samples only) allow parallel variants.
+# Usage: [ENV_GPU=i MEM_FRACTION=f EDIT_SCALE=b N_EDIT=k PORT=p ROBOTWIN_FIXED_SEED=1] rl_joint.sh <gpus comma list> <sft_step_dir> <run_name>
 set -uo pipefail
 GPUS=$1; STEP_DIR=$2; RUN=$3
 ENV_GPU=${ENV_GPU:-${GPUS%%,*}}; MEM_FRACTION=${MEM_FRACTION:-0.85}; EDIT_SCALE=${EDIT_SCALE:-0.2}
+N_EDIT=${N_EDIT:-8}
 W=/root/data/atticux/agent-workspace/expo-ft
 SRC=$W/src/expo-ft
 O=$SRC/expo_ft/agents/vla/openpi
-PORT=8400
+PORT=${PORT:-8400}
 OUT=$W/rl/$RUN
 mkdir -p $OUT
 cd $SRC
@@ -25,14 +27,14 @@ cd $SRC
     --dataset_path=$W/data/lerobot/robotwin/beat_block_hammer_aloha_clean_50 --num_data=50 \
     --update_type=episode --num_updates=3 --offline_ratio=0 \
     --config=configs/model/expo_ft_pi_config.py \
-    --config.N=8 --config.n_edit_samples=8 --config.edit_scale=$EDIT_SCALE \
+    --config.N=8 --config.n_edit_samples=$N_EDIT --config.edit_scale=$EDIT_SCALE \
     --config.pi05_config_name=pi05_robotwin_beat_block_hammer_lora \
     --config.pi05_weight_loader_path=$STEP_DIR/params \
     --config.pi05_assets_dir=$STEP_DIR/assets \
     --config.pi05_asset_id=robotwin/beat_block_hammer_aloha_clean_50 \
     --project_name=expo-ft --run_name=$RUN --output_dir=$W/rl \
     --client_host=127.0.0.1 --client_port=$PORT --fsdp_devices=1 \
-    --resume --checkpoint_model --checkpoint_buffer --checkpoint_interval=2000
+    --resume --checkpoint_model --checkpoint_buffer --checkpoint_interval=2000 --max_to_keep=2
 ) > $OUT/learner.log 2>&1 &
 LEARNER_PID=$!
 until grep -q "EnvClient listening" $OUT/learner.log 2>/dev/null; do
