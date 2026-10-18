@@ -1,8 +1,9 @@
 """Precompute the RoboTwin seeds whose scripted expert succeeds, with each seed's instruction.
 
 RoboTwinEnv with ROBOTWIN_SEED_TABLE then resets from this table instead of running the expert
-(~20-40 s) at every reset, as RLinf does with its train_seeds.json. Seeds are checked exactly as
-RoboTwinEnv.reset would check them, so the table lists the same seeds in the same order.
+(~1 s per seed on a reused task object) at every reset, as RLinf does with its train_seeds.json.
+Seeds are checked exactly as RoboTwinEnv.reset would check them, so the table lists the same seeds
+in the same order.
 
 Runs in RoboTwin's Python environment, one process per GPU, each on a contiguous seed block:
 

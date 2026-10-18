@@ -176,7 +176,7 @@ class RoboTwinEnv:
             self._after_setup()
             return self.get_observation()
         # With fixed_seed the expert check and instruction of the first valid seed are reused,
-        # which also skips the ~60 s expert rollout on every later reset.
+        # which also skips the expert rollout (~1 s on the reused task object) on every later reset.
         if not (self.fixed_seed and self.seed is not None):
             while True:
                 seed = self.next_seed
