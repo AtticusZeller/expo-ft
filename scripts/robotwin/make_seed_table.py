@@ -23,7 +23,8 @@ def check(args):
 
     root = os.path.abspath(os.environ.get("ROBOTWIN_ROOT", "../robotwin"))
     out = os.path.abspath(args.out)
-    env = RoboTwinEnv(root, args.task, task_config_name=args.task_config, instruction_type=args.instruction_type)
+    env = RoboTwinEnv(root, args.task, task_config_name=args.task_config,
+                      instruction_type=args.instruction_type)
     seeds = []
     for seed in range(args.start, args.start + args.count):
         t0 = time.time()
@@ -31,7 +32,8 @@ def check(args):
         if ok:
             seeds.append([seed, env._instruction(episode_info, seed)])
         print(f"seed {seed} ok={ok} {time.time() - t0:.1f}s", flush=True)
-    table = {"task": args.task, "task_config": args.task_config, "instruction_type": args.instruction_type,
+    table = {"task": args.task, "task_config": args.task_config,
+             "instruction_type": args.instruction_type,
              "checked": [args.start, args.start + args.count], "seeds": seeds}
     with open(out, "w", encoding="utf-8") as f:
         json.dump(table, f, indent=1)
@@ -47,7 +49,7 @@ def merge(args):
     keys = {(p["task"], p["task_config"], p["instruction_type"]) for p in parts}
     if len(keys) != 1:
         sys.exit(f"Shards disagree on task/config/instruction type: {keys}")
-    for a, b in zip(parts, parts[1:]):
+    for a, b in zip(parts, parts[1:], strict=False):
         if a["checked"][1] != b["checked"][0]:
             sys.exit(f"Seed blocks are not contiguous: {a['checked']} then {b['checked']}")
     task, task_config, instruction_type = keys.pop()
@@ -61,7 +63,8 @@ def merge(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("check", help="Check one contiguous seed block")
     c.add_argument("--task", required=True)
