@@ -666,15 +666,20 @@ def restore_replay_buffer(
     *,
     up_to_step: int | None = None,
     max_transitions: int | None = None,
-) -> Any:
+    complete_episodes_only: bool = False,
+) -> int | None:
     """Restore replay buffer by re-inserting saved transitions from disk.
-    If max_transitions is set, stop after inserting that many (e.g. for faster loading)."""
+
+    If max_transitions is set, stop after inserting that many (e.g. for faster loading).
+    complete_episodes_only drops a trailing episode with no terminal (`dones`) transition, which
+    a run killed while saving an episode leaves behind. Returns the last restored step, or None.
+    """
     if jax.process_index() != 0:
-        return replay_buffer
+        return None
 
     buffer_dir = epath.Path(checkpoint_dir) / "buffers"
     if not buffer_dir.exists():
-        return replay_buffer
+        return None
 
     if up_to_step is not None:
         cutoff = int(up_to_step)
@@ -690,6 +695,8 @@ def restore_replay_buffer(
 
     inserted = 0
     skipped = 0
+    last_step = None
+    pending = []  # (step, transition) of the episode in progress, held until its terminal step
     for p in tqdm.tqdm(files, desc="Loading replay buffer", unit="trans"):
         if max_transitions is not None and inserted >= max_transitions:
             break
@@ -698,9 +705,18 @@ def restore_replay_buffer(
         if "actions" in transition and np.allclose(transition["actions"], -1):
             skipped += 1
             continue
-        replay_buffer.insert(transition)
-        inserted += 1
+        pending.append((int(p.stem), transition))
+        if complete_episodes_only and not transition.get("dones"):
+            continue
+        for step, t in pending:
+            replay_buffer.insert(t)
+            inserted += 1
+            last_step = step
+        pending = []
     if skipped > 0:
         logging.info("Skipped %d dummy (action=-1) transitions during replay buffer restore.", skipped)
+    if pending:
+        logging.info("Dropped %d transitions of an unfinished episode (steps %d-%d) during restore.",
+                     len(pending), pending[0][0], pending[-1][0])
 
-    return replay_buffer
+    return last_step

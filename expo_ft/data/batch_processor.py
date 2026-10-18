@@ -85,10 +85,14 @@ class BatchProcessor:
             )
         self._ep_buffer_start = self.replay_buffer._insert_index
 
-    def restore(self, checkpoint_dir, up_to_step=None):
-        """Restore replay buffer from disk and rebuild success marks."""
-        restore_replay_buffer(checkpoint_dir, self.replay_buffer, up_to_step=up_to_step)
+    def restore(self, checkpoint_dir, up_to_step=None, complete_episodes_only=False):
+        """Restore replay buffer from disk and rebuild success marks; return the last restored step."""
+        last_step = restore_replay_buffer(
+            checkpoint_dir, self.replay_buffer, up_to_step=up_to_step,
+            complete_episodes_only=complete_episodes_only,
+        )
         self.replay_buffer.restore_success_marks()
+        return last_step
 
     def next_batch(self, combine_rng):
         """Return (critic_batch, actor_batch, new_rng) for one update step."""

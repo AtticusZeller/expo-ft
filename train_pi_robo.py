@@ -256,10 +256,13 @@ def main(_):
             agent = agent.cache_infer_params()
         steps = tuple(checkpoint_manager.all_steps())
         latest_step = max(steps) if steps else None
-        if latest_step is not None:
-            start_step = latest_step
-            logging.info("Resuming from step %d", start_step)
-        batch_processor.restore(checkpoint_dir_path, up_to_step=latest_step)
+        # Keep every finished episode saved after the agent checkpoint (up to one checkpoint interval of
+        # rollouts) and continue the step count after it, so the W&B step and buffer file names never
+        # go back. The weights stay those of the checkpoint; its step is only their label.
+        last_buffer_step = batch_processor.restore(checkpoint_dir_path, complete_episodes_only=True)
+        start_step = max(s for s in (latest_step, last_buffer_step, -1) if s is not None) + 1
+        logging.info("Resuming at step %d: agent checkpoint %s, replay through step %s",
+                     start_step, latest_step, last_buffer_step)
 
     # The env is created only now: EnvClientWrapper blocks until the rollout client
     # dials in, and the agent build above is the slow part.
