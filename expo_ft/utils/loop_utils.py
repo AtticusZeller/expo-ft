@@ -197,6 +197,21 @@ class EpisodeSink:
             self._disk_saves.extend(ready)
         self._transitions = held
 
+    def commit_episode(self, transitions, success, first_step):
+        """Insert one finished episode in a single block and queue its disk copies as
+        first_step, first_step + 1, ...
+
+        With several envs sharing the buffer, episodes must not interleave: success marks
+        cover the inserted range, and restore_replay_buffer rebuilds episodes in step order.
+        """
+        with self.buffer_lock:
+            self.batch_processor.on_episode_start()
+            for transition in transitions:
+                self.batch_processor.insert_transition(transition)
+            self.batch_processor.on_episode_done(success)
+        if self.save_buffer:
+            self._disk_saves.extend(enumerate(transitions, start=first_step))
+
     def flush_episode(self, step, agent):
         self.flush_transitions()
         self._flush_disk_saves()
