@@ -69,7 +69,8 @@ class RoboTwinEnv:
     demonstration fails, exactly like RoboTwin's evaluation; each reset uses the next seed.
     With fixed_seed every reset replays the first valid seed instead. With single_attempt the
     episode also ends as a failure once the task's first attempt is over without success
-    (client/envs/robotwin_attempts.py).
+    (client/envs/robotwin_attempts.py). A positive step_limit lowers the task's step_lim, so
+    retries count only while they fit in it.
 
     One task object serves every expert check and episode, as RoboTwin's evaluation does:
     setup_demo then reuses the robot and its curobo planners (~18 s to build) across scenes.
@@ -77,7 +78,7 @@ class RoboTwinEnv:
 
     def __init__(self, robotwin_root, robotwin_task, task_config_name="demo_clean", seed_index=0,
                  instruction_type="seen", image_size=(224, 224), language_instruction=None,
-                 fixed_seed=False, single_attempt=False, **_):
+                 fixed_seed=False, single_attempt=False, step_limit=0, **_):
         self.robotwin_root = os.path.abspath(robotwin_root)
         # RoboTwin loads assets through paths relative to its root.
         os.chdir(self.robotwin_root)
@@ -96,6 +97,7 @@ class RoboTwinEnv:
             raise ValueError(f"No single-attempt judge for RoboTwin task {robotwin_task}")
         self.judge_cls = ATTEMPT_JUDGES[robotwin_task] if single_attempt else None
         self.judge = None
+        self.step_limit = int(step_limit)
         self.episode_id = 0
         self.seed = None
         self.instruction = None
@@ -150,6 +152,8 @@ class RoboTwinEnv:
             self.seed = seed
             self.instruction = self._instruction(episode_info, seed)
         self._setup(self.seed)
+        if self.step_limit > 0:
+            self.task.step_lim = min(self.task.step_lim, self.step_limit)
         self.judge = self.judge_cls() if self.judge_cls else None
         self.episode_id += 1
         return self.get_observation()

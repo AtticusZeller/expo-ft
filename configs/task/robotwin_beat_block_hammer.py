@@ -32,13 +32,16 @@ def get_config():
     # failure (user 2026-10-18). ROBOTWIN_SINGLE_ATTEMPT=0 restores RoboTwin's protocol, which
     # lets the policy retry until step_lim.
     config.single_attempt = os.environ.get("ROBOTWIN_SINGLE_ATTEMPT", "1") == "1"
+    # ROBOTWIN_STEP_LIMIT=n ends an episode as a failure after n steps instead of step_lim (400), with
+    # retries allowed inside it (user 2026-10-18: 150, near the demonstrations' ~120). 0 keeps step_lim.
+    config.step_limit = int(os.environ.get("ROBOTWIN_STEP_LIMIT", 0))
     config.instruction_type = "seen"
     # Fallback instruction and the learner's default prompt; per-episode instructions come from RoboTwin.
     config.language_instruction = "Pick up the hammer and beat the block."
     config.image_size = (224, 224)
 
     # RoboTwin's step limit for this task (env_cfg/task_config/_eval_step_limit.yml).
-    config.auto_reset_steps = 400
+    config.auto_reset_steps = config.step_limit or 400
     # No wall-clock pacing in simulation: the learner never sleeps between steps.
     config.control_hz = float("inf")
 
