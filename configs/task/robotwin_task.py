@@ -38,6 +38,9 @@ def get_config():
     # (client/envs/robotwin_attempts.py), and the co-trained base is picked under the official
     # protocol for every task (user 2026-10-18).
     config.single_attempt = os.environ.get("ROBOTWIN_SINGLE_ATTEMPT", "0") == "1"
+    # ROBOTWIN_STEP_LIMIT=n ends an episode as a failure after n steps instead of step_lim, with
+    # retries allowed inside it (user 2026-10-19: 1.3x the mean demonstration length). 0 keeps step_lim.
+    config.step_limit = int(os.environ.get("ROBOTWIN_STEP_LIMIT", 0))
     # ROBOTWIN_SEED_TABLE=<json> takes seeds and instructions from a precomputed table
     # (scripts/robotwin/make_seed_table.py) instead of running the expert at every reset.
     config.seed_table = os.environ.get("ROBOTWIN_SEED_TABLE", "")
@@ -49,7 +52,7 @@ def get_config():
     # RoboTwin's step limit for this task, as its evaluation uses.
     with open(os.path.join(config.robotwin_root, "env_cfg", "task_config", "_eval_step_limit.yml"),
               encoding="utf-8") as f:
-        config.auto_reset_steps = int(yaml.safe_load(f)[task])
+        config.auto_reset_steps = config.step_limit or int(yaml.safe_load(f)[task])
     # No wall-clock pacing in simulation: the learner never sleeps between steps.
     config.control_hz = float("inf")
 

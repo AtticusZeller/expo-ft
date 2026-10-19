@@ -4,11 +4,23 @@
 # The first given GPU samples and renders the env; the rest run the updates (batch 64 must divide
 # by their count, e.g. 0,1,2,3,4).
 # PORT and N_EDIT (edit candidates, 0 = critic picks among base samples only) allow parallel variants.
-# Usage: [ENV_GPU=i MEM_FRACTION=f EDIT_SCALE=b N_EDIT=k PORT=p ROBOTWIN_FIXED_SEED=1] rl_joint.sh <gpus comma list> <sft_step_dir> <run_name>
+# TASK picks another RoboTwin task (configs/task/robotwin_task.py; replay prefilled with that task's 50 clean
+# demonstrations); PI05_CONFIG and ASSET_ID name the checkpoint's openpi config and norm-stats asset. The
+# defaults are beat_block_hammer's single-task base. ROBOTWIN_* variables (seed table, step limit, task
+# config) reach both the learner and the env process.
+# Usage: [ENV_GPU=i MEM_FRACTION=f EDIT_SCALE=b N_EDIT=k PORT=p TASK=t PI05_CONFIG=c ASSET_ID=a ROBOTWIN_FIXED_SEED=1]
+#        rl_joint.sh <gpus comma list> <sft_step_dir> <run_name>
 set -uo pipefail
 GPUS=$1; STEP_DIR=$2; RUN=$3
 ENV_GPU=${ENV_GPU:-${GPUS%%,*}}; MEM_FRACTION=${MEM_FRACTION:-0.85}; EDIT_SCALE=${EDIT_SCALE:-0.2}
 N_EDIT=${N_EDIT:-8}
+TASK=${TASK:-beat_block_hammer}
+PI05_CONFIG=${PI05_CONFIG:-pi05_robotwin_beat_block_hammer_lora}
+ASSET_ID=${ASSET_ID:-robotwin/beat_block_hammer_aloha_clean_50}
+if [ "$TASK" = beat_block_hammer ]; then CONFIG_TASK=configs/task/robotwin_beat_block_hammer.py
+else CONFIG_TASK=configs/task/robotwin_task.py; fi
+# Both sides load the task config, which reads these.
+export ROBOTWIN_TASK=$TASK ROBOTWIN_ROOT=/root/data/atticux/robotwin
 W=/root/data/atticux/agent-workspace/expo-ft
 SRC=$W/src/expo-ft
 O=$SRC/expo_ft/agents/vla/openpi
@@ -23,15 +35,15 @@ cd $SRC
   # MEM_FRACTION applies to every learner GPU and must leave the env ~3.5 GB on its card.
   export CUDA_VISIBLE_DEVICES=$GPUS XLA_PYTHON_CLIENT_MEM_FRACTION=$MEM_FRACTION
   exec nice -n 5 $SRC/.venv/bin/python train_pi_robo.py \
-    --config_task=configs/task/robotwin_beat_block_hammer.py \
-    --dataset_path=$W/data/lerobot/robotwin/beat_block_hammer_aloha_clean_50 --num_data=50 \
+    --config_task=$CONFIG_TASK \
+    --dataset_path=$W/data/lerobot/robotwin/${TASK}_aloha_clean_50 --num_data=50 \
     --update_type=episode --num_updates=3 --offline_ratio=0 \
     --config=configs/model/expo_ft_pi_config.py \
     --config.N=8 --config.n_edit_samples=$N_EDIT --config.edit_scale=$EDIT_SCALE \
-    --config.pi05_config_name=pi05_robotwin_beat_block_hammer_lora \
+    --config.pi05_config_name=$PI05_CONFIG \
     --config.pi05_weight_loader_path=$STEP_DIR/params \
     --config.pi05_assets_dir=$STEP_DIR/assets \
-    --config.pi05_asset_id=robotwin/beat_block_hammer_aloha_clean_50 \
+    --config.pi05_asset_id=$ASSET_ID \
     --project_name=expo-ft --run_name=$RUN --output_dir=$W/rl \
     --client_host=127.0.0.1 --client_port=$PORT --fsdp_devices=1 \
     --resume --checkpoint_model --checkpoint_buffer --checkpoint_interval=2000 --max_to_keep=2
@@ -44,9 +56,9 @@ done
 
 # Training seeds come from their own range, away from the evaluation shards (indices 0-7).
 CUDA_VISIBLE_DEVICES=$ENV_GPU VK_ICD_FILENAMES=/root/data/atticux/vulkan/nvidia_icd_egl.json ROBOTWIN_SEED_INDEX=100 \
-ROBOTWIN_ROOT=/root/data/atticux/robotwin PYTHONPATH=$SRC:$O/packages/xense-client/src \
+PYTHONPATH=$SRC:$O/packages/xense-client/src \
   /root/data/atticux/robotwin/.venv/bin/python -m client.run_client --host 127.0.0.1 --port $PORT \
-  --config-task-path configs/task/robotwin_beat_block_hammer.py > $OUT/env.log 2>&1 &
+  --config-task-path $CONFIG_TASK > $OUT/env.log 2>&1 &
 ENV_PID=$!
 trap 'kill $ENV_PID $LEARNER_PID 2>/dev/null' EXIT
 wait $LEARNER_PID
