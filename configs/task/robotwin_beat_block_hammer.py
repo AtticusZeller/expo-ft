@@ -20,7 +20,9 @@ def get_config():
 
     config.env_name = "robotwin_beat_block_hammer"
     config.robotwin_task = "beat_block_hammer"
-    config.task_config_name = "demo_clean"
+    # ROBOTWIN_TASK_CONFIG=demo_randomized evaluates the Hard setting (clutter, random background and
+    # light, table height +-3 cm), which RoboTwin's leaderboard pairs with unseen instructions.
+    config.task_config_name = os.environ.get("ROBOTWIN_TASK_CONFIG", "demo_clean")
     # The RoboTwin checkout the env process runs against; a sibling of expo-ft in this workspace.
     config.robotwin_root = os.environ.get("ROBOTWIN_ROOT", "../robotwin")
     # Seeds start at 100000 * (1 + seed_index). The env process reads this file itself, so parallel eval shards
@@ -38,7 +40,7 @@ def get_config():
     # ROBOTWIN_SEED_TABLE=<json> takes seeds and instructions from a precomputed table
     # (scripts/robotwin/make_seed_table.py) instead of running the expert at every reset.
     config.seed_table = os.environ.get("ROBOTWIN_SEED_TABLE", "")
-    config.instruction_type = "seen"
+    config.instruction_type = os.environ.get("ROBOTWIN_INSTRUCTION_TYPE", "seen")
     # Fallback instruction and the learner's default prompt; per-episode instructions come from RoboTwin.
     config.language_instruction = "Pick up the hammer and beat the block."
     config.image_size = (224, 224)
