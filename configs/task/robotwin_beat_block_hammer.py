@@ -30,10 +30,10 @@ def get_config():
     config.seed_index = int(os.environ.get("ROBOTWIN_SEED_INDEX", 0))
     # ROBOTWIN_FIXED_SEED=1 replays the first valid seed of that range every episode (single-scene debugging).
     config.fixed_seed = os.environ.get("ROBOTWIN_FIXED_SEED", "0") == "1"
-    # One strike per episode for training and evaluation alike: a miss ends the episode as a
-    # failure (user 2026-10-18). ROBOTWIN_SINGLE_ATTEMPT=0 restores RoboTwin's protocol, which
-    # lets the policy retry until step_lim.
-    config.single_attempt = os.environ.get("ROBOTWIN_SINGLE_ATTEMPT", "1") == "1"
+    # Retries count until the step limit, as in RoboTwin's protocol. ROBOTWIN_SINGLE_ATTEMPT=1 ends
+    # the episode as a failure after the first missed strike; it plateaued at 63% in 300 episodes and
+    # is off by default (user 2026-10-19).
+    config.single_attempt = os.environ.get("ROBOTWIN_SINGLE_ATTEMPT", "0") == "1"
     # ROBOTWIN_STEP_LIMIT=n ends an episode as a failure after n steps instead of step_lim (400), with
     # retries allowed inside it (user 2026-10-18: 150, near the demonstrations' ~120). 0 keeps step_lim.
     config.step_limit = int(os.environ.get("ROBOTWIN_STEP_LIMIT", 0))
