@@ -104,6 +104,7 @@ class RoboTwinEnv:
         self.judge = None
         self.step_limit = int(step_limit)
         self.table = self._load_table(seed_table) if seed_table else None
+        self.clear_cache_freq = int(self.args["clear_cache_freq"])
         self.episode_id = 0
         self.seed = None
         self.instruction = None
@@ -170,7 +171,11 @@ class RoboTwinEnv:
                     self.table.pop(0)
 
     def reset(self):
-        self.task.close_env()
+        # As RoboTwin's evaluation: clear SAPIEN's render cache every clear_cache_freq episodes.
+        # Hard scenes load new textures and clutter each episode, and the cache otherwise grows
+        # on the GPU until rendering fails with "cannot create buffer".
+        n = self.episode_id
+        self.task.close_env(clear_cache=n > 0 and n % self.clear_cache_freq == 0)
         if self.table is not None:
             self._reset_from_table()
             self._after_setup()
